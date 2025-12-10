@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -60,6 +60,12 @@ namespace RREFSolver
             this.Controls.Add(solveButton);
         }
 
+        private void ShowResult(string text)
+        {
+            OutputForm form = new OutputForm(text);
+            form.ShowDialog();
+        }
+
         private void SolveButton_Click(object sender, EventArgs e)
         {
             try
@@ -70,24 +76,53 @@ namespace RREFSolver
                     .Select(line => line.Trim().Split(' ').Select(double.Parse).ToArray())
                     .ToArray();
 
+               
+                var original = CloneMatrix(rows);
+
+                
                 string result = SolveRREF(rows);
 
-                // فتح OutputForm
-                OutputForm outputForm = new OutputForm(result);
-                outputForm.ShowDialog();
+               
+                if (result.Contains("No solution"))
+                {
+                    result += "\n(Note: The system of equations is inconsistent, but Transpose/Inverse will still be attempted below.)\n";
+                }
+              
+                result += "\n=== TRANSPOSE (Step-by-step) ===\n";
+                result += TransposeSteps(original);
+
+               
+                if (original.Length == original[0].Length)
+                {
+                    try
+                    {
+                        result += "\n=== INVERSE (Step-by-step) ===\n";
+                        result += InverseSteps(original);
+                    }
+                    catch (Exception ex)
+                    {
+                        result += $"\nCannot compute inverse: {ex.Message}\n";
+                    }
+                }
+                else
+                {
+                    result += "\nMatrix is not square → cannot compute inverse.\n";
+                }
+
+                ShowResult(result);
             }
             catch
             {
-                MessageBox.Show("Invalid input format. Please enter numbers separated by spaces.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Invalid input format. Please enter numbers separated by spaces.",
+                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
-        #region RREF Logic (لمسح أي تعديل)
+        
         private string SolveRREF(double[][] matrix)
         {
             int rows = matrix.Length;
             int cols = matrix[0].Length;
-            int variables = cols - 1;
             int lead = 0;
 
             StringBuilder sb = new StringBuilder();
@@ -157,9 +192,7 @@ namespace RREFSolver
         private void PrintMatrix(double[][] matrix, StringBuilder sb)
         {
             for (int i = 0; i < matrix.Length; i++)
-            {
                 sb.AppendLine(string.Join("\t", matrix[i].Select(x => x.ToString("F2"))));
-            }
             sb.AppendLine();
         }
 
@@ -191,14 +224,107 @@ namespace RREFSolver
             StringBuilder sb = new StringBuilder();
             sb.AppendLine("Unique solution found:");
             for (int i = 0; i < variables; i++)
-            {
-                double value = matrix[i][variables];
-                sb.AppendLine($"x{i + 1} = {value:F4}");
-            }
+                sb.AppendLine($"x{i + 1} = {matrix[i][variables]:F4}");
 
             return sb.ToString();
         }
-        #endregion
+
+   
+        private string TransposeSteps(double[][] matrix)
+        {
+            int rows = matrix.Length;
+            int cols = matrix[0].Length;
+
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine("Original Matrix:");
+            sb.AppendLine(MatrixToString(matrix));
+
+            double[][] t = new double[cols][];
+            for (int i = 0; i < cols; i++)
+            {
+                t[i] = new double[rows];
+                for (int j = 0; j < rows; j++)
+                {
+                    sb.AppendLine($"t[{i},{j}] = matrix[{j},{i}] → {matrix[j][i]:F4}");
+                    t[i][j] = matrix[j][i];
+                }
+            }
+
+            sb.AppendLine("\nTranspose Result:");
+            sb.AppendLine(MatrixToString(t));
+            return sb.ToString();
+        }
+
+        private string InverseSteps(double[][] matrix)
+        {
+            int n = matrix.Length;
+            StringBuilder sb = new StringBuilder();
+
+            sb.AppendLine("Creating augmented matrix [A | I]:");
+
+            double[][] aug = new double[n][];
+            for (int i = 0; i < n; i++)
+            {
+                aug[i] = new double[2 * n];
+                for (int j = 0; j < n; j++)
+                    aug[i][j] = matrix[i][j];
+                aug[i][n + i] = 1;
+            }
+
+            sb.AppendLine(MatrixToString(aug));
+
+            for (int i = 0; i < n; i++)
+            {
+                double pivot = aug[i][i];
+                if (Math.Abs(pivot) < 1e-10)
+                    throw new Exception("Matrix is singular");
+
+                sb.AppendLine($"\nNormalize row {i + 1} by dividing with pivot {pivot:F4}");
+                for (int j = 0; j < 2 * n; j++)
+                    aug[i][j] /= pivot;
+
+                sb.AppendLine(MatrixToString(aug));
+
+                for (int r = 0; r < n; r++)
+                {
+                    if (r != i)
+                    {
+                        double mult = aug[r][i];
+                        sb.AppendLine($"Row {r + 1} = Row {r + 1} – {mult:F4} × Row {i + 1}");
+                        for (int c = 0; c < 2 * n; c++)
+                            aug[r][c] -= mult * aug[i][c];
+
+                        sb.AppendLine(MatrixToString(aug));
+                    }
+                }
+            }
+
+           
+            double[][] inv = new double[n][];
+            for (int i = 0; i < n; i++)
+            {
+                inv[i] = new double[n];
+                for (int j = 0; j < n; j++)
+                    inv[i][j] = aug[i][j + n];
+            }
+
+            sb.AppendLine("Inverse Matrix:");
+            sb.AppendLine(MatrixToString(inv));
+            return sb.ToString();
+        }
+
+        
+        private double[][] CloneMatrix(double[][] m)
+        {
+            return m.Select(row => row.ToArray()).ToArray();
+        }
+
+        private string MatrixToString(double[][] matrix)
+        {
+            StringBuilder sb = new StringBuilder();
+            foreach (var row in matrix)
+                sb.AppendLine(string.Join("\t", row.Select(x => x.ToString("F4"))));
+            return sb.ToString();
+        }
     }
 }
-
